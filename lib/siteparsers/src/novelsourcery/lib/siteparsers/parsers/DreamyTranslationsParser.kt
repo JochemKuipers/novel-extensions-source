@@ -14,7 +14,9 @@ class DreamyTranslationsParser : SiteParser {
     override fun parse(doc: Document, url: HttpUrl, client: OkHttpClient, headers: Headers): String {
         val title = doc.select("h1 > span").first()?.text() ?: ""
         val content = doc.select(".chapter-content > div").first()
-        content?.select("em")?.forEach { em -> em.wrap("<p></p>") }
+        content?.select("em")?.forEach { em ->
+            if (em.closest("p") == null) em.wrap("<p></p>")
+        }
         return combined(title, content?.html() ?: "")
     }
 }

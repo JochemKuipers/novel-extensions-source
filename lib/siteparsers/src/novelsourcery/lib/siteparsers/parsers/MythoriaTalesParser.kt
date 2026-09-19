@@ -101,7 +101,11 @@ class MythoriaTalesParser : SiteParser {
                 "$1: $2",
             )
             .replace(Regex("""\[sfx\](.*?)\[/sfx\]""", RegexOption.IGNORE_CASE), "$1")
-            .replace(Regex("""\[/?(dialogue|sfx)[^\]]*\]""", RegexOption.IGNORE_CASE), "")
+            .replace(
+                Regex("""\[event\s+type="[^"]*"\](.*?)\[/event\]""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)),
+                "$1",
+            )
+            .replace(Regex("""\[/?(dialogue|sfx|event)[^\]]*\]""", RegexOption.IGNORE_CASE), "")
 
         return combined(chapterTitle, content)
     }

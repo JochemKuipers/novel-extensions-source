@@ -41,6 +41,11 @@ abstract class NovelUpdates :
 
     override val supportsLatest = true
 
+    // Site's Cloudflare rule allowlists on this client hint alone; without it, the cf_clearance
+    // cookie from the WebView challenge solve isn't sufficient on its own for some requests.
+    override fun Headers.Builder.configureHeaders(): Headers.Builder = this
+        .add("sec-ch-ua", "\"Chromium\"")
+
     /**
      * The site's novel detail URL shape, as `/series/<slug>`. [SManga.url] is stored as the bare
      * slug (see [SlugPath]); a stored value starting with "/" is a pre-existing full-path entry
