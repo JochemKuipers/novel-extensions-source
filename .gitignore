@@ -13,9 +13,6 @@ generated-src/
 .kotlin
 *.jks
 __pycache__/
-.vscode/
-compiler/
-gradle/
 
 # kei-sync-vscode build/install artifacts (see scripts/kei-sync-vscode/README.md)
 scripts/kei-sync-vscode/node_modules/
