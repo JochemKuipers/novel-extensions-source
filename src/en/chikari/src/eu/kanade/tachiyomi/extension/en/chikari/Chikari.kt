@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.extension.en.chikari
+package eu.kanade.tachiyomi.novelextension.en.chikari
 
 import eu.kanade.tachiyomi.source.NovelSource
 import eu.kanade.tachiyomi.source.model.Filter
