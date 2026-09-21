@@ -1,21 +1,25 @@
 import io.github.keiyoushi.gradle.api.ContentWarning
 
 plugins {
-	alias(kei.plugins.extension)
+    alias(kei.plugins.extension)
 }
 
 keiyoushi {
-	name = "Chikari"
-	versionCode = 1
-	contentWarning = ContentWarning.SAFE
-	libVersion = "1.6"
+    name = "Chikari"
+    versionCode = 1
+    contentWarning = ContentWarning.MIXED
+    libVersion = "1.6"
 
-	source {
-		baseUrl = "https://chikari.moe"
-		lang = "en"
-	}
+    source {
+        baseUrl = "https://chikari.moe"
+        lang = "en"
+    }
 
-	deeplink {
-		path("/..*")
-	}
+    deeplink {
+        path("novels/..*")
+    }
+}
+
+dependencies {
+    implementation(project(":lib:chapterutils"))
 }
