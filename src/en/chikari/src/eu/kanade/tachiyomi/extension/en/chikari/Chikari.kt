@@ -9,7 +9,6 @@ import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import keiyoushi.annotation.Source
-import keiyoushi.lib.chapterutils.paginatedChapterList
 import keiyoushi.network.get
 import keiyoushi.network.rateLimit
 import keiyoushi.source.KeiSource
@@ -18,6 +17,7 @@ import keiyoushi.utils.parseAs
 import keiyoushi.utils.toJsonElement
 import keiyoushi.utils.tryParse
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonElement
 import okhttp3.HttpUrl
@@ -32,7 +32,7 @@ abstract class Chikari :
     KeiSource(),
     NovelSource {
 
-    override fun OkHttpClient.Builder.configureClient() = rateLimit(permits = 4, period = 1.seconds)
+    override fun OkHttpClient.Builder.configureClient() = rateLimit(permits = 8, period = 1.seconds)
 
     override val supportsFilterFetching = true
 
@@ -198,40 +198,14 @@ abstract class Chikari :
         fetchChapters: Boolean,
     ): SMangaUpdate = coroutineScope {
         val slug = manga.url
+        // Details and chapters are independent — don't serialize chapter fetch behind details.
         val detailsDeferred = if (fetchDetails) {
             async { client.get("$baseUrl/api/novels/$slug", headers).parseAs<NovelDto>() }
         } else {
             null
         }
-
         val chaptersDeferred = if (fetchChapters) {
-            async {
-                val siteTotal = detailsDeferred?.await()?.chapterCount ?: 0
-                paginatedChapterList(
-                    existingChapters = chapters,
-                    siteTotal = siteTotal,
-                    assumedPageSize = CHAPTER_PAGE_SIZE,
-                    fetchPage = { page ->
-                        val offset = (page - 1) * CHAPTER_PAGE_SIZE
-                        val dto = client.get(
-                            "$baseUrl/api/novels/$slug/chapters".toHttpUrl().newBuilder()
-                                .addQueryParameter("limit", CHAPTER_PAGE_SIZE.toString())
-                                .addQueryParameter("offset", offset.toString())
-                                .build(),
-                            headers,
-                        ).parseAs<ChapterListDto>()
-                        val parsed = dto.items.map { chapter ->
-                            SChapter.create().apply {
-                                url = "$slug/${formatNumber(chapter.number)}"
-                                name = chapter.title.ifEmpty { "Chapter ${formatNumber(chapter.number)}" }
-                                chapter_number = chapter.number.toFloat()
-                                date_upload = Instant.tryParse(chapter.createdAt)
-                            }
-                        }
-                        parsed to (offset + dto.items.size < dto.total)
-                    },
-                )
-            }
+            async { fetchChapterList(slug, chapters) }
         } else {
             null
         }
@@ -240,6 +214,45 @@ abstract class Chikari :
             manga = detailsDeferred?.await()?.toSMangaDetails() ?: manga,
             chapters = chaptersDeferred?.await() ?: chapters,
         )
+    }
+
+    private suspend fun fetchChapterList(slug: String, existing: List<SChapter>): List<SChapter> {
+        val first = fetchChapterPage(slug, offset = 0)
+        if (existing.isNotEmpty() && existing.size == first.total) {
+            return existing
+        }
+
+        val collected = first.items.toMutableList()
+        if (collected.size >= first.total || first.items.isEmpty()) {
+            return collected.map { it.toSChapter(slug) }
+        }
+
+        val offsets = (CHAPTER_PAGE_SIZE until first.total step CHAPTER_PAGE_SIZE).toList()
+        coroutineScope {
+            offsets.chunked(CHAPTER_PARALLELISM).forEach { chunk ->
+                chunk.map { offset ->
+                    async { fetchChapterPage(slug, offset) }
+                }.awaitAll().forEach { page ->
+                    collected += page.items
+                }
+            }
+        }
+        return collected.map { it.toSChapter(slug) }
+    }
+
+    private suspend fun fetchChapterPage(slug: String, offset: Int): ChapterListDto = client.get(
+        "$baseUrl/api/novels/$slug/chapters".toHttpUrl().newBuilder()
+            .addQueryParameter("limit", CHAPTER_PAGE_SIZE.toString())
+            .addQueryParameter("offset", offset.toString())
+            .build(),
+        headers,
+    ).parseAs()
+
+    private fun ChapterDto.toSChapter(slug: String) = SChapter.create().apply {
+        url = "$slug/${formatNumber(number)}"
+        name = title.ifEmpty { "Chapter ${formatNumber(number)}" }
+        chapter_number = number.toFloat()
+        date_upload = Instant.tryParse(createdAt)
     }
 
     override suspend fun getPageList(chapter: SChapter): List<Page> = listOf(Page(0, chapter.url))
@@ -264,7 +277,10 @@ abstract class Chikari :
 
     companion object {
         private const val PAGE_SIZE = 36
-        private const val CHAPTER_PAGE_SIZE = 100
+
+        // Site's own client uses 500 for novel chapter pages.
+        private const val CHAPTER_PAGE_SIZE = 500
+        private const val CHAPTER_PARALLELISM = 4
         private val PARAGRAPH_SPLIT = Regex("\n{2,}")
     }
 }
