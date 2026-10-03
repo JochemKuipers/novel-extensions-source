@@ -17,6 +17,7 @@ import novelsourcery.lib.siteparsers.parsers.INovelTranslationParser
 import novelsourcery.lib.siteparsers.parsers.InfiniteNovelTranslationsParser
 import novelsourcery.lib.siteparsers.parsers.IsoTlsParser
 import novelsourcery.lib.siteparsers.parsers.JadeScrollsParser
+import novelsourcery.lib.siteparsers.parsers.JpTranslationsForFunParser
 import novelsourcery.lib.siteparsers.parsers.KoFiParser
 import novelsourcery.lib.siteparsers.parsers.KonkonParser
 import novelsourcery.lib.siteparsers.parsers.LeafStudioParser
@@ -69,6 +70,7 @@ object SiteParserRegistry {
         INovelTranslationParser(),
         IsoTlsParser(),
         JadeScrollsParser(),
+        JpTranslationsForFunParser(),
         KoFiParser(),
         KonkonParser(),
         LeafStudioParser(),
