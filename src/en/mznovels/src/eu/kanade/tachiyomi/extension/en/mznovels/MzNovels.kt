@@ -50,6 +50,8 @@ abstract class MzNovels :
      */
     private val mangaPathTemplate: SlugPath = SlugPath("/novel/")
 
+    private fun mangaSlug(path: String): String = mangaPathTemplate.slug(path).substringBefore('/')
+
     override suspend fun fetchPageText(page: Page): String {
         val response = client.get(if (page.url.startsWith("http")) page.url else baseUrl + page.url, headers)
         val doc = response.asJsoup()
@@ -98,7 +100,7 @@ abstract class MzNovels :
 
     override suspend fun getLatestUpdates(page: Int): MangasPage {
         val response = client.get(buildLatestUpdatesUrl(page), headers)
-        return parseNovelList(response, 1) // page is already in URL
+        return parseNovelList(response.asJsoup(), 1) // page is already in URL
     }
     // ======================== Search ========================
 
@@ -136,11 +138,12 @@ abstract class MzNovels :
             return MangasPage(emptyList(), false)
         }
 
-        return parseNovelList(response, requestedPage)
+        // The response body can only be consumed once - reuse the Document already parsed
+        // above instead of calling response.asJsoup() again (throws once the body is closed).
+        return parseNovelList(doc, requestedPage)
     }
 
-    private fun parseNovelList(response: Response, pageNo: Int): MangasPage {
-        val doc = response.asJsoup()
+    private fun parseNovelList(doc: Document, pageNo: Int): MangasPage {
         checkCaptcha(doc)
 
         val novels = doc.select("ul.search-results-list > li.search-result-item:not(.ad-result-item)").mapNotNull { element ->
@@ -155,7 +158,7 @@ abstract class MzNovels :
 
             SManga.create().apply {
                 this.title = title
-                this.url = mangaPathTemplate.slug(novelUrl.removePrefix(baseUrl))
+                this.url = mangaSlug(novelUrl.removePrefix(baseUrl))
                 thumbnail_url = when {
                     coverUrl.isEmpty() -> ""
                     coverUrl.startsWith("http") -> coverUrl
@@ -306,7 +309,8 @@ abstract class MzNovels :
     override fun getMangaUrl(manga: SManga): String = mangaPathTemplate.absolute(baseUrl, manga.url)
 
     override suspend fun getMangaByUrl(url: HttpUrl): SManga? {
-        val slug = mangaPathTemplate.slug(url.encodedPath)
+        if (!url.encodedPath.startsWith("/novel/")) return null
+        val slug = mangaSlug(url.encodedPath)
         val tempManga = SManga.create().apply { this.url = slug }
         val response = client.get(buildMangaDetailsUrl(tempManga), headers, ensureSuccess = false)
         if (!response.isSuccessful) return null

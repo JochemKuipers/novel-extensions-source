@@ -214,8 +214,9 @@ abstract class WuxiaClick :
 
     private fun buildLatestUpdatesRequest(page: Int): Request {
         val offset = (page - 1) * 12
-        // Using -last_chapter since -updated_at is not a valid choice
-        return GET("$apiUrl/search/?search=&offset=$offset&limit=12&order=-last_chapter", headers)
+        // -updated_at and -last_chapter both return HTTP 400 ("not a valid choice") on this API;
+        // -created_at (newest novel entries first) is the closest working proxy for "latest".
+        return GET("$apiUrl/search/?search=&offset=$offset&limit=12&order=-created_at", headers)
     }
 
     override suspend fun getLatestUpdates(page: Int): MangasPage {
@@ -343,7 +344,7 @@ abstract class WuxiaClick :
         }
     }
 
-    override fun getChapterUrl(chapter: SChapter): String = baseUrl + chapter.url
+    override fun getChapterUrl(chapter: SChapter): String = "$baseUrl/chapter/${chapter.url.removePrefix("/chapter/")}"
 
     // ======================== Details + Chapters ========================
 
@@ -449,7 +450,7 @@ abstract class WuxiaClick :
 
         return chapters.map { chapter ->
             SChapter.create().apply {
-                url = "/chapter/${chapter.novSlugChapSlug}"
+                url = chapter.novSlugChapSlug
                 name = chapter.title
                 chapter_number = chapter.index.toFloat()
                 date_upload = parseChapterDate(chapter.timeAdded)

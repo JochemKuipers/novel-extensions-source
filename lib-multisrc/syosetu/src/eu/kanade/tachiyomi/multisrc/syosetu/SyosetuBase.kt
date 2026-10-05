@@ -11,7 +11,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import eu.kanade.tachiyomi.util.asJsoup
 import keiyoushi.lib.chapterutils.checkCloudflare
-import keiyoushi.lib.cookieinterceptor.CookieInterceptor
+import keiyoushi.network.addCookie
 import keiyoushi.network.get
 import keiyoushi.network.rateLimit
 import keiyoushi.source.KeiSource
@@ -65,11 +65,11 @@ abstract class SyosetuBase(
     // CookieJar-backed BridgeInterceptor as soon as the jar holds any cookie for that host
     // (which it will, from ordinary browsing/WebView use) - it replaces the whole header
     // rather than merging into it. Seeding the age-gate cookie into the shared CookieManager
-    // itself (what CookieInterceptor does) is what actually survives that.
+    // itself (what addCookie does) is what actually survives that.
     override fun OkHttpClient.Builder.configureClient(): OkHttpClient.Builder {
         var builder = rateLimit(minimumDelayMillis, recommendedPermits)
         if (isAdult) {
-            builder = builder.addInterceptor(CookieInterceptor("syosetu.com", "over18" to "yes"))
+            builder = builder.addCookie({ "syosetu.com" }, "over18" to "yes")
         }
         return builder
     }
@@ -124,6 +124,13 @@ abstract class SyosetuBase(
     private val novel18ApiUrl = "https://api.syosetu.com/novel18api/api/"
     private val novel18PageSize = 20
 
+    // The API hard-caps how deep its "st" (start offset) search param can go, rejecting anything
+    // past this with "ERROR:2000作品以上は検索できません。" ("cannot search past 2000 works") -
+    // confirmed live at st=2001. "allcount" is the full catalog size (~150k+) and is unrelated to
+    // this cap, so comparing against it alone let hasNextPage stay true for ~7900 pages while the
+    // site only ever allows ~100.
+    private val novel18MaxSearchOffset = 2000
+
     private suspend fun fetchNovel18ApiList(page: Int, order: String, word: String? = null): MangasPage {
         val apiUrl = novel18ApiUrl.toHttpUrl().newBuilder()
             .addQueryParameter("out", "json")
@@ -143,7 +150,9 @@ abstract class SyosetuBase(
                 url = mangaPath.slug("/${entry.ncode.lowercase()}/")
             }
         }
-        return MangasPage(novels, page * novel18PageSize < allCount)
+        val nextPageStartOffset = (page * novel18PageSize) + 1
+        val hasNextPage = page * novel18PageSize < allCount && nextPageStartOffset <= novel18MaxSearchOffset
+        return MangasPage(novels, hasNextPage)
     }
 
     // ---------- URL builders ----------
