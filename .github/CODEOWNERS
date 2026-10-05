@@ -1,1 +1,6 @@
-/src/zh/ @stevenyomi
+# Last matching pattern wins. Everything is owner-gated by default; extension
+# modules under src/ can also be approved by another maintainer.
+
+*            @NovelSourcery/owners
+
+/src/        @NovelSourcery/maintainers @NovelSourcery/owners
